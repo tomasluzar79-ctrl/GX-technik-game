@@ -20,7 +20,6 @@
 </head>
 <body>
 
-    <!-- Plátno, na které se hra vykresluje -->
     <canvas id="gameCanvas" width="1024" height="576"></canvas>
 
     <script>
@@ -37,10 +36,10 @@
         const roadMaxX = 774;
 
         let score = 0;
-        let gameSpeed = 5;
+        let gameSpeed = 4;
         let isGameOver = false;
 
-        // Načítání obrázků
+        // Načítání obrázků s kontrolou
         const assets = {};
         const assetFiles = {
             car: 'assets/images/level1/player_car_back.png',
@@ -58,9 +57,9 @@
         for (let key in assetFiles) {
             assets[key] = new Image();
             assets[key].src = assetFiles[key];
+            assets[key].onerror = () => console.error("Chybí soubor: " + assetFiles[key]);
         }
 
-        // Ovládání klávesami A a D
         const keys = { a: false, d: false };
         window.addEventListener('keydown', (e) => {
             if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.a = true;
@@ -74,16 +73,17 @@
         let entities = [];
 
         function spawnEntity() {
-            if (Math.random() < 0.02) {
+            // Generujeme méně často a pouze nahoře na horizontu
+            if (Math.random() < 0.015) {
                 const types = ['trafficJam', 'roadWork', 'police', 'prostitute', 'coin'];
                 const type = types[Math.floor(Math.random() * types.length)];
-                const laneOffset = (Math.random() - 0.5) * 400; 
+                const laneOffset = (Math.random() - 0.5) * 300; 
 
                 entities.push({
                     type: type,
                     x: roadCenter + laneOffset,
-                    y: 150,
-                    scale: 0.05
+                    y: 290, // Startuje přesně na horizontu silnice
+                    scale: 0.02 // Začíná velmi malé v dálce
                 });
             }
         }
@@ -91,24 +91,27 @@
         function update() {
             if (isGameOver) return;
 
-            if (keys.a) playerX -= 6;
-            if (keys.d) playerX += 6;
+            if (keys.a) playerX -= 7;
+            if (keys.d) playerX += 7;
 
-            if (playerX < roadMinX + 40) playerX = roadMinX + 40;
-            if (playerX > roadMaxX - 40) playerX = roadMaxX - 40;
+            // Omezení v rámci silnice
+            if (playerX < roadMinX + 30) playerX = roadMinX + 30;
+            if (playerX > roadMaxX - 30) playerX = roadMaxX - 30;
 
             spawnEntity();
 
             for (let i = entities.length - 1; i >= 0; i--) {
                 let ent = entities[i];
                 ent.y += gameSpeed;
-                ent.scale += 0.003 * gameSpeed;
+                ent.scale += 0.0015 * gameSpeed; // Plynulejší přibližování
 
-                let targetX = roadCenter + (ent.x - roadCenter) * (ent.scale * 3);
+                // Výpočet pozice v perspektivě
+                let targetX = roadCenter + (ent.x - roadCenter) * (ent.scale * 15);
                 ent.renderX = targetX;
 
-                if (ent.y > playerY - 30 && ent.y < playerY + 50) {
-                    if (Math.abs(ent.renderX - playerX) < 50) {
+                // Jemnější detekce kolizí (pouze když je objekt blízko auta a ve stejném pruhu)
+                if (ent.y > playerY && ent.y < playerY + 60) {
+                    if (Math.abs(ent.renderX - playerX) < 40) {
                         if (ent.type === 'coin') {
                             score += 100;
                             entities.splice(i, 1);
@@ -121,7 +124,8 @@
                     }
                 }
 
-                if (ent.y > canvas.height) {
+                // Odstranění, když překážka přejede hráče
+                if (ent.y > canvas.height + 50) {
                     entities.splice(i, 1);
                 }
             }
@@ -138,7 +142,7 @@
                 ctx.drawImage(assets.bgFar, 0, 50, canvas.width, 200);
             }
 
-            // Silnice
+            // Silnice (začíná uprostřed obrazovky - horizont)
             if (assets.road && assets.road.complete && assets.road.naturalWidth !== 0) {
                 ctx.drawImage(assets.road, roadMinX, canvas.height / 2, roadMaxX - roadMinX, canvas.height / 2);
             } else {
@@ -155,21 +159,21 @@
             entities.forEach(ent => {
                 let img = assets[ent.type];
                 if (img && img.complete && img.naturalWidth !== 0) {
-                    let width = img.width * ent.scale;
-                    let height = img.height * ent.scale;
+                    let width = img.width * ent.scale * 3;
+                    let height = img.height * ent.scale * 3;
                     ctx.drawImage(img, ent.renderX - width / 2, ent.y - height, width, height);
                 } else {
-                    ctx.fillStyle = "red";
+                    ctx.fillStyle = ent.type === 'coin' ? "gold" : "red";
                     ctx.fillRect(ent.renderX - 15, ent.y - 30, 30, 30);
                 }
             });
 
             // Hráčovo auto
             if (assets.car && assets.car.complete && assets.car.naturalWidth !== 0) {
-                ctx.drawImage(assets.car, playerX - 70, playerY, 140, 140);
+                ctx.drawImage(assets.car, playerX - 60, playerY, 120, 120);
             } else {
-                ctx.fillStyle = "blue";
-                ctx.fillRect(playerX - 35, playerY, 70, 100);
+                ctx.fillStyle = "#0055ff";
+                ctx.fillRect(playerX - 30, playerY, 60, 90);
             }
 
             // Skóre
@@ -178,14 +182,13 @@
             ctx.fillText("SKÓRE: " + score, 30, 40);
         }
 
-        function gameLoop() {
-            update();
-            draw();
-            requestAnimationFrame(gameLoop);
-        }
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
 
-        // Spuštění hry
-        gameLoop();
+    gameLoop();
     </script>
 </body>
 </html>
