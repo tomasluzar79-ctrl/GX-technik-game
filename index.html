@@ -1,191 +1,38 @@
-// --- LEVEL 1: CESTA K ZÁKAZNÍKOVI (Pseudo-3D Dálnice) ---
-
-const canvas = document.getElementById('gameCanvas'); // Ujisti se, že ID odpovídá tvému canvasu
-const ctx = canvas.getContext('2d');
-
-// Nastavení rozlišení plátna
-canvas.width = 1024;
-canvas.height = 576;
-
-// Stav hry a proměnné hráče
-let playerX = canvas.width / 2; // Počáteční pozici auta (uprostřed)
-const playerY = canvas.height - 140; // Pozice auta výškově na obrazovce
-const roadCenter = canvas.width / 2;
-const roadMinX = 250; // Levý okraj silnice v perspektivě
-const roadMaxX = 774; // Pravý okraj silnice v perspektivě
-
-let score = 0;
-let gameSpeed = 5;
-let isGameOver = false;
-
-// Načítání obrázků (Assety z GitHubu)
-const assets = {};
-const assetFiles = {
-    car: 'assets/images/level1/player_car_back.png',
-    road: 'assets/images/level1/road_texture.png',
-    shoulder: 'assets/images/level1/shoulder_texture.png',
-    bgFar: 'assets/images/level1/bg_far.png',
-    bgNear: 'assets/images/level1/bg_near.png',
-    trafficJam: 'assets/images/level1/obstacle_traffic_jam.png',
-    roadWork: 'assets/images/level1/obstacle_road_work.png',
-    police: 'assets/images/level1/obstacle_police.png',
-    prostitute: 'assets/images/level1/obstacle_prostitute.png',
-    coin: 'assets/images/level1/item_coin_gx.png'
-};
-
-let imagesLoaded = 0;
-let totalImages = Object.keys(assetFiles).length;
-
-function loadAssets() {
-    for (let key in assetFiles) {
-        assets[key] = new Image();
-        assets[key].src = assetFiles[key];
-        assets[key].onload = () => {
-            imagesLoaded++;
-            if (imagesLoaded === totalImages) {
-                console.log("Všechny textury Levelu 1 načteny!");
-                startGameLoop();
-            }
-        };
-    }
-}
-
-// Ovládání klávesami
-const keys = { a: false, d: false, left: false, right: false };
-
-window.addEventListener('keydown', (e) => {
-    if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.a = true;
-    if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.d = true;
-});
-
-window.addEventListener('keyup', (e) => {
-    if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.a = false;
-    if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.d = false;
-});
-
-// Seznam překážek a předmětů na silnici
-let entities = [];
-let roadScrollY = 0;
-let bgFarX = 0;
-let bgNearScroll = 0;
-
-function spawnEntity() {
-    if (Math.random() < 0.02) { // Frekvence spawnování
-        const types = ['trafficJam', 'roadWork', 'police', 'prostitute', 'coin'];
-        const type = types[Math.floor(Math.random() * types.length)];
-        
-        // Náhodná pozice napříč silnicí (v perspektivě od -1 do 1, kde 0 je střed)
-        const laneOffset = (Math.random() - 0.5) * 400; 
-
-        entities.push({
-            type: type,
-            x: roadCenter + laneOffset,
-            y: 150, // Startuje na horizontu
-            scale: 0.05 // Začíná jako malý bod v dálce
-        });
-    }
-}
-
-// Aktualizace logiky hry
-function update() {
-    if (isGameOver) return;
-
-    // Pohyb auta do stran
-    if (keys.a) playerX -= 6;
-    if (keys.d) playerX += 6;
-
-    // Omezení auta v rámci krajnic silnice
-    if (playerX < roadMinX + 40) playerX = roadMinX + 40;
-    if (playerX > roadMaxX - 40) playerX = roadMaxX - 40;
-
-    // Posun textur (efekt rychlosti)
-    roadScrollY = (roadScrollY + gameSpeed * 2) % canvas.height;
-    bgNearScroll = (bgNearScroll + gameSpeed * 0.5) % canvas.width;
-
-    spawnEntity();
-
-    // Posun překážek kupředu (efekt perspektivy - zvětšování)
-    for (let i = entities.length - 1; i >= 0; i--) {
-        let ent = entities[i];
-        ent.y += gameSpeed;
-        ent.scale += 0.003 * gameSpeed; // Rychlost přibližování
-
-        // Pozice X se mírně rozevírá od středu horizontu k uživateli
-        let targetX = roadCenter + (ent.x - roadCenter) * (ent.scale * 3);
-        ent.renderX = targetX;
-
-        // Kolize s hráčem (když je objekt blízko spodku obrazovky)
-        if (ent.y > playerY - 30 && ent.y < playerY + 50) {
-            if (Math.abs(ent.renderX - playerX) < 50) {
-                if (ent.type === 'coin') {
-                    score += 100; // Sběr mince
-                    entities.splice(i, 1);
-                    continue;
-                } else {
-                    // Kolize s překážkou
-                    isGameOver = true;
-                    alert("Karambol! Narazil jsi do překážky. Zkus to znovu.");
-                    location.reload();
-                }
-            }
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>GX Servisní Technik</title>
+    <style>
+        body {
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
         }
-
-        // Odstranění objektů, které přejely hráče
-        if (ent.y > canvas.height) {
-            entities.splice(i, 1);
+        canvas {
+            border: 2px solid #444;
+            background: #222;
         }
-    }
-}
+    </style>
+</head>
+<body>
 
-// Vykreslování grafiky na plátno
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    <!-- Plátno, na které se hra vykresluje -->
+    <canvas id="gameCanvas" width="1024" height="576"></canvas>
 
-    // 1. Obloha a vzdálené pozadí (Ostrava)
-    ctx.fillStyle = "#1b263b";
-    ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
-    ctx.drawImage(assets.bgFar, 0, 50, canvas.width, 200);
+    <!-- Zde začíná herní skript -->
+    <script>
+        // --- LEVEL 1: CESTA K ZÁKAZNÍKOVI (Pseudo-3D Dálnice) ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
 
-    // 2. Vykreslení silnice a krajnic
-    ctx.drawImage(assets.road, roadMinX, canvas.height / 2, roadMaxX - roadMinX, canvas.height / 2);
+        // ... sem zkopíruj zbytek toho JavaScript kódu, co jsem ti posílal předtím ...
 
-    // 3. Vykreslení překážek a předmětů (podle hloubkového měřítka / scale)
-    // Seřadíme entity podle vzdálenosti (scale), aby se vzdálenější vykreslovaly pod bližšími
-    entities.sort((a, b) => a.scale - b.scale);
-
-    entities.forEach(ent => {
-        let img = assets[ent.type];
-        if (img) {
-            let width = img.width * ent.scale;
-            let height = img.height * ent.scale;
-            ctx.drawImage(img, ent.renderX - width / 2, ent.y - height, width, height);
-        }
-    });
-
-    // 4. Vykreslení hráčova auta (staticky dole, kopíruje playerX)
-    let carImg = assets.car;
-    let carWidth = 140;
-    let carHeight = 140;
-    ctx.drawImage(carImg, playerX - carWidth / 2, playerY, carWidth, carHeight);
-
-    // 5. Uživatelské rozhraní (Skóre)
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "20px Arial";
-    ctx.fillText("SKÓRE: " + score, 30, 40);
-    ctx.fillText("CELKEM MINEK / BONUSŮ", canvas.width - 250, 40);
-}
-
-// Hlavní herní smyčka
-function gameLoop() {
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
-}
-
-// Spuštění po načtení assetů
-function startGameLoop() {
-    gameLoop();
-}
-
-// Inicializace načítání
-loadAssets();
+        // Inicializace načítání
+        loadAssets();
+    </script>
+</body>
+</html>
