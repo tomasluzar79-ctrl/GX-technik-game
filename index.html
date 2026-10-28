@@ -26,20 +26,20 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        canvas.width = 1024;
-        canvas.height = 576;
-
-        let playerX = canvas.width / 2;
-        const playerY = canvas.height - 130;
+        // Nastavení horizontu a silnice
+        const horizonY = 250;
         const roadCenter = canvas.width / 2;
         const roadMinX = 280;
         const roadMaxX = 744;
 
+        let playerX = canvas.width / 2;
+        const playerY = canvas.height - 120;
+
         let score = 0;
-        let gameSpeed = 3.5;
+        let gameSpeed = 2.5;
         let isGameOver = false;
 
-        // Funkcja pro automatické odstranění zeleného pozadí (chroma-key)
+        // Funkce pro automatické odstranění zeleného pozadí (chroma-key)
         function removeGreenBackground(img) {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = img.width;
@@ -55,9 +55,8 @@
                     let g = data[i + 1];
                     let b = data[i + 2];
 
-                    // Pokud je pixel výrazně zelený, nastavíme ho jako průhledný
                     if (g > 100 && g > r + 40 && g > b + 40) {
-                        data[i + 3] = 0; // Alpha kanál na 0 (průhledno)
+                        data[i + 3] = 0; // Průhledno
                     }
                 }
                 tempCtx.putImageData(imgData, 0, 0);
@@ -81,14 +80,14 @@
             coin: 'assets/images/level1/item_coin_gx.png'
         };
 
-        // Načtení a automatické očištění obrázků od zelené barvy
+        // Načtení a očištění obrázků
         for (let key in assetFiles) {
             let img = new Image();
             img.src = assetFiles[key];
             img.onload = () => {
                 assets[key] = removeGreenBackground(img);
             };
-            assets[key] = img; // Dočasná náhrada, než se obrázek načte
+            assets[key] = img; 
         }
 
         const keys = { a: false, d: false };
@@ -104,16 +103,17 @@
         let entities = [];
 
         function spawnEntity() {
-            if (Math.random() < 0.012) {
+            if (Math.random() < 0.015 && entities.length < 5) {
                 const types = ['trafficJam', 'roadWork', 'police', 'prostitute', 'coin'];
                 const type = types[Math.floor(Math.random() * types.length)];
-                const laneOffset = (Math.random() - 0.5) * 250; 
+                
+                // Náhodná pozice v rámci šířki silnice v dálce
+                const laneOffset = (Math.random() - 0.5) * 180; 
 
                 entities.push({
                     type: type,
-                    x: roadCenter + laneOffset,
-                    y: 280, // Start na horizontu
-                    scale: 0.01 // Malé v dálce
+                    laneOffset: laneOffset, // Relativní pozice vůči středu silnice
+                    y: horizonY,            // Start přesně na horizontu
                 });
             }
         }
@@ -124,34 +124,49 @@
             if (keys.a) playerX -= 6;
             if (keys.d) playerX += 6;
 
-            if (playerX < roadMinX + 20) playerX = roadMinX + 20;
-            if (playerX > roadMaxX - 20) playerX = roadMaxX - 20;
+            // Omezení pohybu auta v rámci silnice
+            if (playerX < roadMinX + 30) playerX = roadMinX + 30;
+            if (playerX > roadMaxX - 30) playerX = roadMaxX - 30;
 
             spawnEntity();
 
             for (let i = entities.length - 1; i >= 0; i--) {
                 let ent = entities[i];
+                
+                // Pohyb kupředu (zrychluje směrem k dolnímu okraji)
                 ent.y += gameSpeed;
-                ent.scale += 0.0012 * gameSpeed;
+                gameSpeed += 0.0003; // Postupné zrychlování hry
 
-                let targetX = roadCenter + (ent.x - roadCenter) * (ent.scale * 12);
-                ent.renderX = targetX;
+                // Výpočet perspektivy (faktor zvětšení 0.0 na horizontu až 1.0 u hráče)
+                let distanceFactor = (ent.y - horizonY) / (canvas.height - horizonY);
+                if (distanceFactor < 0) distanceFactor = 0;
 
-                // Detekce kolize
-                if (ent.y > playerY - 10 && ent.y < playerY + 40) {
-                    if (Math.abs(ent.renderX - playerX) < 35) {
+                // Šířka silnice se rozšiřuje směrem dolů
+                let currentRoadWidthAtY = roadMinX + (roadMaxX - roadMinX) * distanceFactor;
+                let currentRoadCenter = roadCenter; // Může se upravit pro zatáčky, teď drží střed
+                
+                ent.renderX = currentRoadCenter + ent.laneOffset * (0.2 + 0.8 * distanceFactor);
+
+                // Velikost objektu podle vzdálenosti
+                let scale = 0.1 + distanceFactor * 0.9;
+                ent.renderScale = scale;
+
+                // Detekce kolize s hráčem
+                if (ent.y > playerY - 30 && ent.y < playerY + 20) {
+                    if (Math.abs(ent.renderX - playerX) < 45) {
                         if (ent.type === 'coin') {
                             score += 100;
                             entities.splice(i, 1);
                             continue;
                         } else {
                             isGameOver = true;
-                            alert("Karambol! Zkus to znovu.");
+                            alert("Karambol! Skóre: " + score + "\nZkus to znovu.");
                             location.reload();
                         }
                     }
                 }
 
+                // Odstranění, když objekt odjede mimo obrazovku dole
                 if (ent.y > canvas.height + 50) {
                     entities.splice(i, 1);
                 }
@@ -163,37 +178,50 @@
 
             // Obloha
             ctx.fillStyle = "#1b263b";
-            ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+            ctx.fillRect(0, 0, canvas.width, horizonY);
             
             if (assets.bgFar) {
-                ctx.drawImage(assets.bgFar, 0, 30, canvas.width, 220);
+                ctx.drawImage(assets.bgFar, 0, horizonY - 100, canvas.width, 100);
             }
 
-            // Silnice
+            // Silnice (jednoduchý lichoběžník od horizontu dolů)
+            ctx.fillStyle = "#333";
+            ctx.beginPath();
+            ctx.moveTo(roadCenter - (roadMaxX - roadMinX) * 0.15, horizonY);
+            ctx.lineTo(roadCenter + (roadMaxX - roadMinX) * 0.15, horizonY);
+            ctx.lineTo(roadMaxX, canvas.height);
+            ctx.lineTo(roadMinX, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+
             if (assets.road) {
-                ctx.drawImage(assets.road, roadMinX, canvas.height / 2, roadMaxX - roadMinX, canvas.height / 2);
+                // Pokud je k dispozici textura silnice, lze ji vykreslit
+                // Prozatím držíme čistý základ
             }
 
-            // Překážky
-            entities.sort((a, b) => a.scale - b.scale);
+            // Vykreslení překážek (seřazené od nejvzdálenějších po nejbližší kvůli překryvu)
+            entities.sort((a, b) => a.y - b.y);
             entities.forEach(ent => {
                 let img = assets[ent.type];
                 if (img) {
-                    let width = img.width * ent.scale * 1.5;
-                    let height = img.height * ent.scale * 1.5;
+                    let baseWidth = img.width * 0.35;
+                    let baseHeight = img.height * 0.35;
+                    let width = baseWidth * ent.renderScale;
+                    let height = baseHeight * ent.renderScale;
+                    
                     ctx.drawImage(img, ent.renderX - width / 2, ent.y - height, width, height);
                 }
             });
 
-            // Hráčovo auto
+            // Hráčovo auto (dole na obrazovce)
             if (assets.car) {
-                ctx.drawImage(assets.car, playerX - 50, playerY, 100, 100);
+                ctx.drawImage(assets.car, playerX - 55, playerY - 30, 110, 110);
             }
 
             // Skóre
             ctx.fillStyle = "#ffffff";
-            ctx.font = "22px Arial";
-            ctx.fillText("SKÓRE: " + score, 30, 40);
+            ctx.font = "bold 24px Arial";
+            ctx.fillText("SKÓRE: " + score, 30, 45);
         }
 
         function gameLoop() {
