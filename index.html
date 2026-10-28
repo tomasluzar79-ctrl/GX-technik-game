@@ -2,94 +2,55 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <title>GX Servisní Technik</title>
+    <title>GX ActiveSafety - Servisní Technik</title>
     <style>
         body {
-            background-color: #111;
+            background-color: #0b0f19;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
             margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            border: 2px solid #1f293d;
+            border-radius: 8px;
+            background: #0f172a;
         }
         canvas {
-            border: 2px solid #444;
-            background: #1b263b;
+            display: block;
         }
     </style>
 </head>
 <body>
 
-    <canvas id="gameCanvas" width="1024" height="576"></canvas>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="1024" height="576"></canvas>
+    </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Nastavení horizontu a silnice
-        const horizonY = 250;
+        // Herní proměnné
+        const horizonY = 220;
+        const roadMinX = 264;
+        const roadMaxX = 760;
         const roadCenter = canvas.width / 2;
-        const roadMinX = 280;
-        const roadMaxX = 744;
 
-        let playerX = canvas.width / 2;
-        const playerY = canvas.height - 120;
+        let playerX = roadCenter;
+        const playerY = canvas.height - 110;
 
         let score = 0;
-        let gameSpeed = 2.5;
+        let gameSpeed = 3;
         let isGameOver = false;
+        let roadAnimOffset = 0;
 
-        // Funkce pro automatické odstranění zeleného pozadí (chroma-key)
-        function removeGreenBackground(img) {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = img.width;
-            tempCanvas.height = img.height;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(img, 0, 0);
-
-            try {
-                const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-                const data = imgData.data;
-                for (let i = 0; i < data.length; i += 4) {
-                    let r = data[i];
-                    let g = data[i + 1];
-                    let b = data[i + 2];
-
-                    if (g > 100 && g > r + 40 && g > b + 40) {
-                        data[i + 3] = 0; // Průhledno
-                    }
-                }
-                tempCtx.putImageData(imgData, 0, 0);
-            } catch (e) {
-                console.error("Chyba při zpracování obrazu:", e);
-            }
-            return tempCanvas;
-        }
-
-        const assets = {};
-        const assetFiles = {
-            car: 'assets/images/level1/player_car_back.png',
-            road: 'assets/images/level1/road_texture.png',
-            shoulder: 'assets/images/level1/shoulder_texture.png',
-            bgFar: 'assets/images/level1/bg_far.png',
-            bgNear: 'assets/images/level1/bg_near.png',
-            trafficJam: 'assets/images/level1/obstacle_traffic_jam.png',
-            roadWork: 'assets/images/level1/obstacle_road_work.png',
-            police: 'assets/images/level1/obstacle_police.png',
-            prostitute: 'assets/images/level1/obstacle_prostitute.png',
-            coin: 'assets/images/level1/item_coin_gx.png'
-        };
-
-        // Načtení a očištění obrázků
-        for (let key in assetFiles) {
-            let img = new Image();
-            img.src = assetFiles[key];
-            img.onload = () => {
-                assets[key] = removeGreenBackground(img);
-            };
-            assets[key] = img; 
-        }
-
+        // Ovládání
         const keys = { a: false, d: false };
         window.addEventListener('keydown', (e) => {
             if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.a = true;
@@ -102,18 +63,20 @@
 
         let entities = [];
 
+        // Generování objektů (překážky / bonusy)
         function spawnEntity() {
-            if (Math.random() < 0.015 && entities.length < 5) {
-                const types = ['trafficJam', 'roadWork', 'police', 'prostitute', 'coin'];
-                const type = types[Math.floor(Math.random() * types.length)];
+            if (Math.random() < 0.02 && entities.length < 6) {
+                const types = ['trafficJam', 'roadWork', 'police', 'coin'];
+                const typeWeights = ['trafficJam', 'trafficJam', 'roadWork', 'police', 'coin'];
+                const type = typeWeights[Math.floor(Math.random() * typeWeights.length)];
                 
-                // Náhodná pozice v rámci šířki silnice v dálce
-                const laneOffset = (Math.random() - 0.5) * 180; 
+                // Náhodná pozice v jízdním pruhu
+                const laneOffset = (Math.random() - 0.5) * 320;
 
                 entities.push({
                     type: type,
-                    laneOffset: laneOffset, // Relativní pozice vůči středu silnice
-                    y: horizonY,            // Start přesně na horizontu
+                    laneOffset: laneOffset,
+                    y: horizonY + 5,
                 });
             }
         }
@@ -121,108 +84,281 @@
         function update() {
             if (isGameOver) return;
 
-            if (keys.a) playerX -= 6;
-            if (keys.d) playerX += 6;
+            // Pohyb hráče
+            if (keys.a) playerX -= 7;
+            if (keys.d) playerX += 7;
 
-            // Omezení pohybu auta v rámci silnice
-            if (playerX < roadMinX + 30) playerX = roadMinX + 30;
-            if (playerX > roadMaxX - 30) playerX = roadMaxX - 30;
+            // Omezení v rámci silnice
+            if (playerX < roadMinX + 35) playerX = roadMinX + 35;
+            if (playerX > roadMaxX - 35) playerX = roadMaxX - 35;
 
             spawnEntity();
+            roadAnimOffset = (roadAnimOffset + gameSpeed * 2) % 60;
+            gameSpeed += 0.0005; // Mírné zrychlování
 
             for (let i = entities.length - 1; i >= 0; i--) {
                 let ent = entities[i];
-                
-                // Pohyb kupředu (zrychluje směrem k dolnímu okraji)
                 ent.y += gameSpeed;
-                gameSpeed += 0.0003; // Postupné zrychlování hry
 
-                // Výpočet perspektivy (faktor zvětšení 0.0 na horizontu až 1.0 u hráče)
-                let distanceFactor = (ent.y - horizonY) / (canvas.height - horizonY);
-                if (distanceFactor < 0) distanceFactor = 0;
+                // Perspektivní faktor (0 na horizontu, 1 u dolního okraje)
+                let factor = (ent.y - horizonY) / (canvas.height - horizonY);
+                let currentWidth = roadMinX + (roadMaxX - roadMinX) * factor;
+                ent.renderX = roadCenter + (ent.laneOffset * factor);
+                ent.scale = 0.2 + factor * 0.8;
 
-                // Šířka silnice se rozšiřuje směrem dolů
-                let currentRoadWidthAtY = roadMinX + (roadMaxX - roadMinX) * distanceFactor;
-                let currentRoadCenter = roadCenter; // Může se upravit pro zatáčky, teď drží střed
-                
-                ent.renderX = currentRoadCenter + ent.laneOffset * (0.2 + 0.8 * distanceFactor);
-
-                // Velikost objektu podle vzdálenosti
-                let scale = 0.1 + distanceFactor * 0.9;
-                ent.renderScale = scale;
-
-                // Detekce kolize s hráčem
-                if (ent.y > playerY - 30 && ent.y < playerY + 20) {
-                    if (Math.abs(ent.renderX - playerX) < 45) {
+                // Kolize s hráčem
+                if (ent.y > playerY - 35 && ent.y < playerY + 25) {
+                    if (Math.abs(ent.renderX - playerX) < 45 * ent.scale) {
                         if (ent.type === 'coin') {
-                            score += 100;
+                            score += 150;
                             entities.splice(i, 1);
                             continue;
                         } else {
                             isGameOver = true;
-                            alert("Karambol! Skóre: " + score + "\nZkus to znovu.");
-                            location.reload();
                         }
                     }
                 }
 
-                // Odstranění, když objekt odjede mimo obrazovku dole
-                if (ent.y > canvas.height + 50) {
+                // Smazání, když objekt odjede
+                if (ent.y > canvas.height + 40) {
                     entities.splice(i, 1);
                 }
             }
         }
 
+        // Vykreslení procedurálního auta
+        function drawCar(x, y, scale = 1, isPlayer = false) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+
+            // Stín pod autem
+            ctx.fillStyle = "rgba(0,0,0,0.5)";
+            ctx.beginPath();
+            ctx.ellipse(0, 35, 38, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Karoserie
+            ctx.fillStyle = isPlayer ? "#10b981" : "#ef4444"; // Zelená pro GX auto, červená pro překážku
+            if (!isPlayer) ctx.fillStyle = "#3b82f6"; // Modrá dodávka/auto
+
+            ctx.beginPath();
+            ctx.roundRect(-30, -25, 60, 65, 12);
+            ctx.fill();
+
+            // Střecha / kabina
+            ctx.fillStyle = "#1e293b";
+            ctx.beginPath();
+            ctx.roundRect(-24, -15, 48, 40, 8);
+            ctx.fill();
+
+            // Čelní / zadní sklo
+            ctx.fillStyle = "#94a3b8";
+            if (isPlayer) {
+                // Zadní sklo (hráč jede dopředu, vidíme jeho zadek)
+                ctx.fillRect(-20, 5, 40, 15);
+                // Světla
+                ctx.fillStyle = "#ef4444";
+                ctx.fillRect(-26, -23, 10, 5);
+                ctx.fillRect(16, -23, 10, 5);
+                // GX logo nápis
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 10px sans-serif";
+                ctx.fillText("GX", -7, -2);
+            } else {
+                // Přední sklo protijedoucího/překážky
+                ctx.fillRect(-20, -15, 40, 15);
+                // Světla
+                ctx.fillStyle = "#facc15";
+                ctx.fillRect(-26, 18, 10, 5);
+                ctx.fillRect(16, 18, 10, 5);
+            }
+
+            ctx.restore();
+        }
+
+        // Vykreslení kuželu / zátarasu (Road Work)
+        function drawRoadWork(x, y, scale) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+
+            // Stín
+            ctx.fillStyle = "rgba(0,0,0,0.4)";
+            ctx.beginPath();
+            ctx.ellipse(0, 20, 20, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Výstražný kužel
+            ctx.fillStyle = "#f97316";
+            ctx.beginPath();
+            ctx.moveTo(0, -25);
+            ctx.lineTo(20, 18);
+            ctx.lineTo(-20, 18);
+            ctx.closePath();
+            ctx.fill();
+
+            // Bílé pruhy na kuželu
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.moveTo(-5, -5);
+            ctx.lineTo(5, -5);
+            ctx.lineTo(8, 2);
+            ctx.lineTo(-8, 2);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // Vykreslení UWB / GX Tokenu (Coin)
+        function drawCoin(x, y, scale) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+
+            // Zářivá aura
+            let gradient = ctx.createRadialGradient(0, 0, 2, 0, 0, 22);
+            gradient.addColorStop(0, "rgba(250, 204, 21, 0.8)");
+            gradient.addColorStop(1, "rgba(250, 204, 21, 0)");
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, 22, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Mince / Token
+            ctx.fillStyle = "#eab308";
+            ctx.beginPath();
+            ctx.arc(0, 0, 14, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = "#fef08a";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Text uvnitř mince
+            ctx.fillStyle = "#422006";
+            ctx.font = "bold 9px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("GX", 0, 0);
+
+            ctx.restore();
+        }
+
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Obloha
-            ctx.fillStyle = "#1b263b";
+            // 1. Obloha (gradient)
+            let skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
+            skyGrad.addColorStop(0, "#090d16");
+            skyGrad.addColorStop(1, "#1e293b");
+            ctx.fillStyle = skyGrad;
             ctx.fillRect(0, 0, canvas.width, horizonY);
-            
-            if (assets.bgFar) {
-                ctx.drawImage(assets.bgFar, 0, horizonY - 100, canvas.width, 100);
-            }
 
-            // Silnice (jednoduchý lichoběžník od horizontu dolů)
-            ctx.fillStyle = "#333";
+            // Horizontová linie (průmyslová silueta / panorama v dálce)
+            ctx.fillStyle = "#334155";
+            ctx.fillRect(0, horizonY - 15, canvas.width, 15);
+            ctx.fillStyle = "#0f172a";
+            // Jednoduchá silueta budov v pozadí
+            ctx.fillRect(150, horizonY - 45, 60, 30);
+            ctx.fillRect(230, horizonY - 60, 80, 45);
+            ctx.fillRect(700, horizonY - 50, 90, 35);
+
+            // 2. Okolní krajina / tráva
+            ctx.fillStyle = "#0f172a";
+            ctx.fillRect(0, horizonY, canvas.width, canvas.height - horizonY);
+
+            // 3. Silnice (perspektivní lichoběžník)
+            ctx.fillStyle = "#1e293b";
             ctx.beginPath();
-            ctx.moveTo(roadCenter - (roadMaxX - roadMinX) * 0.15, horizonY);
-            ctx.lineTo(roadCenter + (roadMaxX - roadMinX) * 0.15, horizonY);
+            ctx.moveTo(roadCenter - 40, horizonY);
+            ctx.lineTo(roadCenter + 40, horizonY);
             ctx.lineTo(roadMaxX, canvas.height);
             ctx.lineTo(roadMinX, canvas.height);
             ctx.closePath();
             ctx.fill();
 
-            if (assets.road) {
-                // Pokud je k dispozici textura silnice, lze ji vykreslit
-                // Prozatím držíme čistý základ
-            }
+            // Okraje silnice (bílé čáry)
+            ctx.strokeStyle = "#cbd5e1";
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(roadCenter - 40, horizonY);
+            ctx.lineTo(roadMinX, canvas.height);
+            ctx.stroke();
 
-            // Vykreslení překážek (seřazené od nejvzdálenějších po nejbližší kvůli překryvu)
+            ctx.beginPath();
+            ctx.moveTo(roadCenter + 40, horizonY);
+            ctx.lineTo(roadMaxX, canvas.height);
+            ctx.stroke();
+
+            // Středová přerušovaná čára (animovaná pohybem)
+            ctx.strokeStyle = "#facc15";
+            ctx.lineWidth = 4;
+            ctx.setLineDash([20, 30]);
+            ctx.lineDashOffset = -roadAnimOffset * 2;
+            ctx.beginPath();
+            ctx.moveTo(roadCenter, horizonY);
+            ctx.lineTo(roadCenter, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset
+
+            // 4. Seřazení a vykreslení entit (překážky, mince) podle hloubky
             entities.sort((a, b) => a.y - b.y);
             entities.forEach(ent => {
-                let img = assets[ent.type];
-                if (img) {
-                    let baseWidth = img.width * 0.35;
-                    let baseHeight = img.height * 0.35;
-                    let width = baseWidth * ent.renderScale;
-                    let height = baseHeight * ent.renderScale;
-                    
-                    ctx.drawImage(img, ent.renderX - width / 2, ent.y - height, width, height);
+                if (ent.type === 'trafficJam' || ent.type === 'police') {
+                    drawCar(ent.renderX, ent.y, ent.scale, false);
+                } else if (ent.type === 'roadWork') {
+                    drawRoadWork(ent.renderX, ent.y, ent.scale);
+                } else if (ent.type === 'coin') {
+                    drawCoin(ent.renderX, ent.y, ent.scale);
                 }
             });
 
-            // Hráčovo auto (dole na obrazovce)
-            if (assets.car) {
-                ctx.drawImage(assets.car, playerX - 55, playerY - 30, 110, 110);
-            }
+            // 5. Hráčovo auto dole
+            drawCar(playerX, playerY, 1.2, true);
 
-            // Skóre
+            // 6. UI / Skóre / Rychlost
+            ctx.fillStyle = "rgba(15, 23, 42, 0.8)";
+            ctx.fillRect(20, 20, 220, 60);
+            ctx.strokeStyle = "#334155";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(20, 20, 220, 60);
+
             ctx.fillStyle = "#ffffff";
-            ctx.font = "bold 24px Arial";
-            ctx.fillText("SKÓRE: " + score, 30, 45);
+            ctx.font = "bold 18px sans-serif";
+            ctx.fillText("SKÓRE: " + score, 35, 45);
+            ctx.fillStyle = "#10b981";
+            ctx.font = "14px sans-serif";
+            ctx.fillText("STATUS: AKTIVNÍ", 35, 68);
+
+            // Game Over obrazovka
+            if (isGameOver) {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = "#ef4444";
+                ctx.font = "bold 42px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("KARAMBOL!", canvas.width / 2, canvas.height / 2 - 30);
+
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "20px sans-serif";
+                ctx.fillText("Dosažené skóre: " + score, canvas.width / 2, canvas.height / 2 + 15);
+
+                ctx.fillStyle = "#94a3b8";
+                ctx.font = "15px sans-serif";
+                ctx.fillText("Kliknutím nebo stisknutím klávesy restartuješ hru", canvas.width / 2, canvas.height / 2 + 60);
+                ctx.textAlign = "left"; // Reset
+            }
         }
+
+        // Restart po kliknutí na Game Over
+        window.addEventListener('click', () => {
+            if (isGameOver) {
+                location.reload();
+            }
+        });
 
         function gameLoop() {
             update();
